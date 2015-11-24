@@ -1,0 +1,93 @@
+        
+		//private class DrawingDescription
+		//function to get the layer DrawingDescription
+		//string strSourceName: ID of Featurelayer of ArcGIS Server Mapservice
+
+		private ESRI.ArcGIS.Carto.IFeatureLayerDrawingDescription2 DrawingDescription ( string strSourceName )
+        {
+            ESRI.ArcGIS.Carto.IFeatureLayerDrawingDescription2 pSourceDrawingDescription = null;
+            ESRI.ArcGIS.Carto.IMapServerInfo3 pMapServerInfo = MapServerInfo;
+            if ( ( pMapServerInfo != null ) &&
+                 ( !System.String.IsNullOrEmpty ( strSourceName ) ) )
+            {
+                ESRI.ArcGIS.Carto.IMapLayerInfos pLayerInfos = pMapServerInfo.MapLayerInfos;
+                int iIdxInfo = 0;
+                while ( ( pSourceDrawingDescription == null ) &&
+                        ( iIdxInfo < pLayerInfos.Count ) )
+                {
+                    ESRI.ArcGIS.Carto.IMapLayerInfo pLayerInfo = pLayerInfos.get_Element ( iIdxInfo );
+                    if ( ( pLayerInfo.IsFeatureLayer ) && ( pLayerInfo.Name == strSourceName ) )
+                    {
+                        ESRI.ArcGIS.esriSystem.ILongArray pLayerIDs = new ESRI.ArcGIS.esriSystem.LongArrayClass ( );
+                        pLayerIDs.Add ( pLayerInfo.ID );
+                        ESRI.ArcGIS.Carto.IServerSymbolOutputOptions pSymbolOptions = new ESRI.ArcGIS.Carto.ServerSymbolOutputOptionsClass ( );
+                        pSymbolOptions.PictureOutputType = ESRI.ArcGIS.Carto.esriServerPictureOutputType.esriServerPictureOutputAsIPicture; 
+                        pSymbolOptions.ConvertLabelExpressions = false;
+                        ESRI.ArcGIS.Carto.IMapServer3 pMapServer = serverObjectHelper.ServerObject as ESRI.ArcGIS.Carto.IMapServer3;
+                        ESRI.ArcGIS.Carto.ILayerDrawingDescriptions pDrawingDescriptions = pMapServer.GetDefaultLayerDrawingDescriptions ( pMapServer.DefaultMapName, pLayerIDs, pSymbolOptions );
+                        if ( ( pDrawingDescriptions != null ) &&
+                             ( pDrawingDescriptions.Count == 1 ) )
+                        {
+                            pSourceDrawingDescription = pDrawingDescriptions.get_Element ( 0 ) as ESRI.ArcGIS.Carto.IFeatureLayerDrawingDescription2;
+                        }
+                    }
+                    iIdxInfo++;
+                }
+            }
+            return pSourceDrawingDescription;
+        }
+		
+		//private function SymbolByFilter
+		//function to get the symbol from the DrawingDescription
+		//it can be any symbol (SimpleMarker, PictureMarker), also in a ClassBreakRenderer
+		private ESRI.ArcGIS.Display.ISymbol SymbolByFilter ( ESRI.ArcGIS.Carto.IFeatureLayerDrawingDescription2 pSourceDrawingDescription, string strFilter )
+        {
+            ESRI.ArcGIS.Display.ISymbol pSymbol = null;
+            if ( ( pSourceDrawingDescription != null ) &&
+                 ( pSourceDrawingDescription.FeatureRenderer != null ) )
+            {
+                ESRI.ArcGIS.Geodatabase.IFeatureClass pDatasource = DataSourcesAccess.GetDataSource ( MapServerInfo.Name, pSourceDrawingDescription.SourceLayerID ) as ESRI.ArcGIS.Geodatabase.IFeatureClass;
+                if ( pDatasource != null )
+                {
+                    ESRI.ArcGIS.Geodatabase.IQueryFilter pQueryFilter = null;
+                    ESRI.ArcGIS.Geodatabase.IFeatureCursor pCursor = null;
+                    ESRI.ArcGIS.Geodatabase.IFeature pFeature = null;
+                    try
+                    {
+                        pQueryFilter = new ESRI.ArcGIS.Geodatabase.QueryFilterClass ( );
+                        pQueryFilter.SubFields = "*";
+                        pQueryFilter.WhereClause = strFilter;
+                        pCursor = pDatasource.Search ( pQueryFilter, false );
+                        pFeature = pCursor.NextFeature ( );
+                        if ( pFeature != null )
+                        {
+                            pSymbol = pSourceDrawingDescription.FeatureRenderer.get_SymbolByFeature ( pFeature );
+                        }
+                    }
+                    catch ( System.Exception pException )
+                    {
+                        logger.LogMessage ( ServerLogger.msgType.error,
+                                "SymbolByFilter",
+                                -1,
+                                pException.Message );
+                        pSymbol = null;
+                    }
+                    finally
+                    {
+                        if ( pFeature != null )
+                        {
+                            System.Runtime.InteropServices.Marshal.FinalReleaseComObject ( pFeature );
+                        }
+                        if ( pCursor != null )
+                        {
+                            System.Runtime.InteropServices.Marshal.FinalReleaseComObject ( pCursor );
+                        }
+                        if ( pQueryFilter != null )
+                        {
+                            System.Runtime.InteropServices.Marshal.FinalReleaseComObject ( pQueryFilter );
+                        }
+                    }
+                }
+            }
+            return pSymbol;
+        }
